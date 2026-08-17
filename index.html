@@ -1,0 +1,1109 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>🎮 单词大对决</title>
+<style>
+/* ================= 全局 ================= */
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+.hidden{display:none !important;}
+:root{--card-w:90px;}
+body{
+  font-family:"Comic Sans MS","Chalkboard SE","Segoe Print","华文彩云","微软雅黑",sans-serif;
+  background:linear-gradient(180deg,#8fd8ff 0%,#c9f0ff 45%,#ffe9b8 100%);
+  min-height:100vh;overflow-x:hidden;
+  user-select:none;-webkit-user-select:none;
+}
+/* 天空装饰 */
+.cloud{position:fixed;z-index:0;opacity:.5;pointer-events:none;animation:drift linear infinite;}
+@keyframes drift{from{transform:translateX(-15vw)}to{transform:translateX(115vw)}}
+.sun{position:fixed;top:8px;right:16px;font-size:44px;z-index:0;pointer-events:none;animation:spin 26s linear infinite;opacity:.8;}
+@keyframes spin{to{transform:rotate(360deg)}}
+.rainbow{position:fixed;bottom:6px;left:10px;font-size:46px;z-index:0;pointer-events:none;opacity:.6;}
+
+/* ================= 顶部栏 ================= */
+#top{position:sticky;top:0;z-index:40;background:rgba(255,255,255,.85);backdrop-filter:blur(8px);
+  padding:8px 10px;border-bottom:3px dashed #ffb7d5;box-shadow:0 4px 14px rgba(0,0,0,.08);}
+.title-row{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;}
+h1{font-size:clamp(18px,2.6vw,26px);color:#e0508c;text-shadow:2px 2px 0 #fff,0 3px 0 rgba(224,80,140,.25);letter-spacing:1px;animation:bounce 2.4s ease-in-out infinite;}
+@keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+.btn{font-family:inherit;font-size:15px;font-weight:bold;border:none;border-radius:14px;padding:6px 12px;cursor:pointer;
+  background:#fff;border:3px solid #ffb7d5;color:#c2457f;box-shadow:0 3px 0 #ff9cc2;transition:transform .08s,box-shadow .08s;white-space:nowrap;}
+.btn:active{transform:translateY(3px);box-shadow:0 0 0 #ff9cc2;}
+.btn.active{background:linear-gradient(180deg,#ffd34d,#ffb300);border-color:#ff9f1c;color:#7a4a00;box-shadow:0 3px 0 #e08e00;}
+.btn:disabled{opacity:.6;}
+.btn.small{padding:4px 9px;font-size:13px;}
+.score-chip{background:#fff;border:2px solid var(--tc);border-radius:999px;padding:3px 11px;font-size:15px;color:#7a5c1e;box-shadow:0 2px 0 var(--tc);}
+.score-chip b{color:var(--tc-dark);font-size:17px;}
+select{font-family:inherit;font-size:14px;border:2px solid #cfe6ff;border-radius:8px;padding:2px 4px;background:#fff;}
+
+/* ================= 对战区 ================= */
+#arena{display:flex;gap:10px;padding:8px 10px;position:relative;z-index:5;}
+.team-panel{flex:1 1 0;min-width:0;display:flex;flex-direction:column;border:4px solid var(--tc);border-radius:20px;
+  background:rgba(255,255,255,.5);padding:6px 8px;overflow:hidden;}
+.team-head{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:4px 10px;background:var(--tc);border-radius:12px;color:#fff;}
+.team-name{font-size:clamp(14px,1.6vw,21px);font-weight:bold;cursor:pointer;white-space:nowrap;text-shadow:0 1px 0 rgba(0,0,0,.15);}
+.team-name:hover{text-decoration:underline;}
+.team-progress{font-size:clamp(11px,1.2vw,15px);opacity:.95;white-space:nowrap;}
+.team-score{font-size:clamp(13px,1.4vw,19px);font-weight:bold;white-space:nowrap;}
+.board{flex:1;min-height:0;display:grid;grid-template-columns:repeat(6,var(--card-w,90px));gap:var(--card-gap,8px);
+  justify-content:center;align-content:center;overflow:hidden;}
+
+/* ================= 卡牌 ================= */
+.card{position:relative;aspect-ratio:3/4;perspective:900px;cursor:pointer;animation:pop .45s both;}
+@keyframes pop{from{transform:scale(0);opacity:0}70%{transform:scale(1.12)}to{transform:scale(1);opacity:1}}
+.card-inner{position:absolute;inset:0;transform-style:preserve-3d;transition:transform .5s cubic-bezier(.3,1.3,.4,1);}
+.card.flipped .card-inner{transform:rotateY(180deg);}
+.face{position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;border-radius:14px;
+  border:3px solid #fff;box-shadow:0 4px 0 rgba(0,0,0,.15),inset 0 0 0 2px rgba(255,255,255,.5);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden;}
+.front{background:
+  radial-gradient(circle at 20% 20%,rgba(255,255,255,.55) 0 12%,transparent 13%),
+  radial-gradient(circle at 80% 75%,rgba(255,255,255,.45) 0 12%,transparent 13%),
+  hsl(var(--h,200) 75% 86%);}
+.letter{font-size:calc(var(--card-w)*0.52);font-weight:bold;color:#fff;
+  -webkit-text-stroke:calc(var(--card-w)*0.03) hsl(var(--h,200) 62% 52%);
+  text-shadow:0 calc(var(--card-w)*0.03) 0 hsl(var(--h,200) 62% 44%);}
+.corner{position:absolute;top:4px;right:8px;color:rgba(255,255,255,.9);font-size:calc(var(--card-w)*0.13);}
+.back{transform:rotateY(180deg);background-color:#fffdf3;
+  background-image:radial-gradient(#ffe9b8 1.5px,transparent 1.5px);background-size:14px 14px;}
+.pic{width:82%;height:50%;margin-top:4%;border-radius:12px;background:#fff;border:3px dashed #ffc94d;
+  display:flex;align-items:center;justify-content:center;overflow:hidden;font-size:calc(var(--card-w)*0.5);}
+.pic img{width:100%;height:100%;object-fit:cover;}
+.word{font-size:calc(var(--card-w)*0.19);font-weight:bold;color:#4d7cbd;margin-top:2%;max-width:92%;
+  text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.cn{font-size:calc(var(--card-w)*0.14);color:#e0508c;font-weight:bold;}
+/* 已配对 */
+.card.matched .face{box-shadow:0 0 0 4px #6fcf73,0 4px 0 rgba(0,0,0,.15);}
+.card.matched{animation:matchpop .45s;}
+@keyframes matchpop{50%{transform:scale(1.1)}}
+/* 动画 */
+@keyframes wiggle{0%,100%{transform:rotate(0)}20%{transform:rotate(-8deg)}40%{transform:rotate(8deg)}60%{transform:rotate(-6deg)}80%{transform:rotate(6deg)}}
+.card.wiggle{animation:wiggle .5s;}
+
+/* ================= 游戏栏（记忆大挑战） ================= */
+#gamebar{display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap;position:relative;z-index:35;
+  background:rgba(255,255,255,.92);border:3px solid #4d96ff;border-radius:18px;margin:6px 10px 0;padding:6px 12px;box-shadow:0 3px 0 #2f6fd0;}
+#memBar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:center;}
+#memCount{font-size:20px;font-weight:bold;color:#e0508c;min-width:80px;text-align:center;}
+#quizBar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:center;}
+.qb-num{font-size:16px;color:#33608c;font-weight:bold;}
+.qb-emoji{font-size:38px;}
+.qb-word{font-size:22px;font-weight:bold;color:#e0508c;}
+.qb-hint{font-size:14px;color:#7a5c1e;}
+.round-btn{width:42px;height:42px;border-radius:50%;border:3px solid #6bcb77;background:#fff;font-size:19px;cursor:pointer;box-shadow:0 3px 0 #4aa758;}
+.round-btn:active{transform:translateY(3px);box-shadow:0 0 0 #4aa758;}
+
+/* ================= 倒计时 ================= */
+#countBox{position:fixed;inset:0;z-index:95;display:flex;align-items:center;justify-content:center;pointer-events:none;background:rgba(255,255,255,.25);}
+#countBox span{font-size:150px;font-weight:bold;color:#e0508c;-webkit-text-stroke:4px #fff;text-shadow:0 8px 0 rgba(0,0,0,.15);animation:pop .5s;}
+
+/* ================= 提示气泡 ================= */
+#toast{position:fixed;top:16%;left:50%;transform:translateX(-50%) scale(.6);background:rgba(255,255,255,.97);
+  border:3px solid #ffc94d;color:#7a5c1e;font-size:20px;font-weight:bold;padding:12px 26px;border-radius:999px;
+  box-shadow:0 6px 0 #ffc94d;z-index:90;opacity:0;pointer-events:none;transition:all .25s cubic-bezier(.3,1.4,.4,1);white-space:nowrap;}
+#toast.show{opacity:1;transform:translateX(-50%) scale(1);}
+
+/* ================= 星星爆发 ================= */
+.starburst{position:fixed;z-index:60;font-size:1.6rem;pointer-events:none;animation:fly .8s ease-out forwards;}
+@keyframes fly{to{transform:translate(var(--dx),var(--dy)) scale(.3);opacity:0}}
+
+/* ================= 彩带 ================= */
+#confetti{position:fixed;inset:0;z-index:80;pointer-events:none;}
+
+/* ================= 弹窗 ================= */
+.overlay{position:fixed;inset:0;background:rgba(70,50,120,.45);z-index:100;display:flex;align-items:center;justify-content:center;padding:12px;}
+.panel{background:#fff;border-radius:24px;border:4px solid #ffb7d5;box-shadow:0 10px 0 rgba(0,0,0,.18);
+  padding:18px;width:min(96vw,900px);max-height:92vh;overflow:auto;text-align:center;}
+.panel h2{color:#e0508c;margin-bottom:6px;font-size:24px;}
+.big-emoji{font-size:64px;animation:bounce 1.2s ease-in-out infinite;}
+.panel-text{font-size:18px;color:#7a5c1e;line-height:1.8;margin:8px 0 14px;white-space:pre-line;}
+.panel-text b{color:#e0508c;}
+.panel-btns{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;}
+.tip{font-size:13px;color:#8a6d3b;margin:6px 0 10px;line-height:1.6;}
+.rows{display:grid;grid-template-columns:repeat(auto-fill,minmax(400px,1fr));gap:8px;margin-top:10px;text-align:left;}
+.sgroup{grid-column:1/-1;color:#4d7cbd;margin-top:10px;text-align:left;font-size:16px;border-bottom:2px dashed #ffc94d;padding-bottom:4px;}
+.srow{display:grid;grid-template-columns:34px 1fr 1fr 48px 1.6fr 44px;gap:6px;align-items:center;
+  background:#f6fbff;border:2px solid #d9ecff;border-radius:12px;padding:6px 8px;}
+.srow.pair{grid-template-columns:34px 1.4fr 1fr 48px;}
+.sletter{width:30px;height:30px;border-radius:10px;background:hsl(var(--h) 75% 86%);display:flex;align-items:center;justify-content:center;font-weight:bold;color:hsl(var(--h) 62% 40%);}
+.srow input{font-family:inherit;font-size:14px;padding:5px 8px;border:2px solid #cfe6ff;border-radius:8px;min-width:0;width:100%;}
+.srow input:focus{outline:none;border-color:#ff9cc2;}
+.s-fetch{font-size:16px;border:2px solid #cfe6ff;background:#fff;border-radius:8px;cursor:pointer;padding:4px 0;}
+@media (max-width:520px){
+  .rows{grid-template-columns:1fr;}
+  .srow{grid-template-columns:30px 1fr 1fr 40px 44px;}
+  .srow .s-img{grid-column:2/4;}
+}
+#footerHint{text-align:center;color:#7a5c1e;opacity:.85;margin:0 0 16px;font-size:14px;z-index:5;position:relative;}
+
+/* 窄屏：两队上下排列 */
+@media (max-width:880px){
+  #arena{flex-direction:column;}
+  .board{height:52vh;}
+}
+</style>
+</head>
+<body>
+
+<!-- 天空装饰 -->
+<div class="cloud" style="top:6%;font-size:44px;animation-duration:36s;">☁️</div>
+<div class="cloud" style="top:16%;font-size:32px;animation-duration:48s;animation-delay:-12s;">☁️</div>
+<div class="cloud" style="top:3%;font-size:54px;animation-duration:60s;animation-delay:-30s;">☁️</div>
+<div class="cloud" style="top:22%;font-size:28px;animation-duration:42s;animation-delay:-20s;">☁️</div>
+<div class="sun">☀️</div>
+<div class="rainbow">🌈</div>
+
+<!-- 顶部栏 -->
+<header id="top">
+  <div class="title-row">
+    <h1>🎮 单词大对决</h1>
+    <button class="btn active" id="btnGameLetters">🔤 字母翻翻看</button>
+    <button class="btn" id="btnGameMemory">🧠 记忆大挑战</button>
+    <span class="score-chip" style="--tc:#ff8a80;--tc-dark:#d32f2f;">🔴 <b id="name0">红队</b> · ⭐ <b id="score0">0</b></span>
+    <span class="score-chip" style="--tc:#82b1ff;--tc-dark:#1565c0;">🔵 <b id="name1">蓝队</b> · ⭐ <b id="score1">0</b></span>
+    <button class="btn small" id="btnMute">🔊</button>
+    <button class="btn small" id="btnRestart">🔄 重开本局</button>
+    <button class="btn small" id="btnClear">🧹 清零比分</button>
+    <button class="btn small" id="btnSettings">⚙️ 设置单词</button>
+  </div>
+</header>
+
+<!-- 记忆大挑战游戏栏 -->
+<div id="gamebar" class="hidden">
+  <div id="memBar">
+    ⏱️ <select id="memTime">
+      <option value="15">15 秒</option>
+      <option value="30" selected>30 秒</option>
+      <option value="45">45 秒</option>
+      <option value="60">60 秒</option>
+    </select>
+    题数 <select id="qTotalSel">
+      <option value="5">5 题</option>
+      <option value="10" selected>10 题</option>
+      <option value="15">15 题</option>
+      <option value="26">26 题</option>
+    </select>
+    <button class="btn" id="btnMemorize">👀 开始记忆</button>
+    <button class="btn" id="btnSkipMem">⏭️ 跳过</button>
+    <button class="btn" id="btnCheck">✔️ 检查记忆情况</button>
+    <span id="memCount">准备开始！</span>
+  </div>
+  <div id="quizBar" class="hidden">
+    <span class="qb-num">第 <b id="qIdx">1</b>/<b id="qTotal">10</b> 题</span>
+    <span class="qb-emoji" id="qbEmoji">🍎</span>
+    <span class="qb-word" id="qbWord">apple 苹果</span>
+    <button class="round-btn" id="qbSpeak2">🔊</button>
+    <span class="qb-hint">这个单词藏在哪个字母下面？每队各点一次，答对不翻回、答错翻回去！</span>
+  </div>
+</div>
+
+<!-- 对战区 -->
+<main id="arena">
+  <section class="team-panel" id="panel0" style="--tc:#ff8a80;">
+    <div class="team-head">
+      <span class="team-name" id="pname0" title="点我改名">🔴 红队</span>
+      <span class="team-progress" id="prog0"></span>
+      <span class="team-score">⭐ <b id="pscore0">0</b></span>
+    </div>
+    <div class="board" id="board0"></div>
+  </section>
+  <section class="team-panel" id="panel1" style="--tc:#82b1ff;">
+    <div class="team-head">
+      <span class="team-name" id="pname1" title="点我改名">🔵 蓝队</span>
+      <span class="team-progress" id="prog1"></span>
+      <span class="team-score">⭐ <b id="pscore1">0</b></span>
+    </div>
+    <div class="board" id="board1"></div>
+  </section>
+</main>
+
+<p id="footerHint">🔴 红队 vs 🔵 蓝队！点队名可以改名，点 ⚙️ 设置两个游戏的单词。翻翻看：13 对单词找相同；记忆挑战：先记后查～</p>
+
+<!-- 提示气泡 -->
+<div id="toast"></div>
+<div id="countBox" class="hidden"></div>
+<canvas id="confetti"></canvas>
+
+<!-- 胜负弹窗 -->
+<div id="winOverlay" class="overlay hidden">
+  <div class="panel">
+    <div class="big-emoji" id="winEmoji">🏆</div>
+    <h2 id="winTitle">红队获胜！</h2>
+    <p class="panel-text" id="winText"></p>
+    <div class="panel-btns">
+      <button class="btn" id="winAgain">🔁 再来一轮</button>
+      <button class="btn" id="winClose">👀 看看成果</button>
+    </div>
+  </div>
+</div>
+
+<!-- 设置弹窗 -->
+<div id="settingsOverlay" class="overlay hidden">
+  <div class="panel">
+    <h2>⚙️ 设置单词</h2>
+    <div class="panel-btns">
+      <button class="btn" id="btnDefaults">✨ 恢复默认词库</button>
+      <button class="btn" id="btnFetchAll">🖼️ 一键找图</button>
+      <button class="btn" id="btnSave">✅ 保存并开始</button>
+      <button class="btn" id="btnCloseSettings">✖️ 关闭</button>
+    </div>
+    <p class="tip">💡 两个游戏的单词分开设置：<b>字母翻翻看</b>用 13 个单词（每个出现两次，随机藏在 26 张字母牌后面，两队位置不同）；<b>记忆大挑战</b>用 26 个不同单词（随机藏在字母牌后面，两队位置不同）。<br>🖼️ 图片会自动从网上找（维基共享图片 → AI 生成 → 免费图库），找不到就自动用表情 😊 代替。教室没网也能玩！</p>
+    <div class="rows" id="settingsRows"></div>
+  </div>
+</div>
+
+<script>
+'use strict';
+/* =====================================================
+   单词大对决（双队对战）
+   两个游戏：
+   1. 🔤 字母翻翻看：26 张字母牌（A～Z 顺序），背后藏 13 对相同单词（两队随机不同）。
+      规则：第一张翻开不回去；第二张一样→都留着(+10)，不一样→第二张翻回去、第一张留着。
+      先配完 13 对的队伍获胜(+30)。
+   2. 🧠 记忆大挑战：26 张字母牌，背后藏 26 个不同单词（两队随机不同）。
+      流程：记忆(单词全亮) → 翻看复习(翻一个看一个、自动翻回) → 点「检查记忆情况」
+      → 抢答：显示单词，点自己棋盘上的字母；答对→不翻回(+10)，答错→翻回去。
+      每队每题只可点一次，双方都答错时亮出正确答案。
+   图片：按「维基共享 → AI 生成 → LoremFlickr」顺序自动寻找，失败用表情兜底。
+   ===================================================== */
+
+/* ================= 可调参数 ================= */
+const MISMATCH_MS = 1200;    // 翻翻看：配错时第二张翻回前停留
+const PEEK_BACK_MS = 3000;   // 记忆挑战复习：翻看多久自动翻回
+const WRONG_SHOW_MS = 2000;  // 记忆挑战抢答：答错展示多久翻回
+const REVEAL_MS = 2500;      // 记忆挑战：双方都答错时亮答案多久
+
+/* ================= 默认词库 ================= */
+const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+const DEFAULT_MEM = [
+  {word:'apple',      cn:'苹果',   emoji:'🍎'},
+  {word:'banana',     cn:'香蕉',   emoji:'🍌'},
+  {word:'cat',        cn:'猫',     emoji:'🐱'},
+  {word:'dog',        cn:'狗',     emoji:'🐶'},
+  {word:'egg',        cn:'鸡蛋',   emoji:'🥚'},
+  {word:'fish',       cn:'鱼',     emoji:'🐟'},
+  {word:'grape',      cn:'葡萄',   emoji:'🍇'},
+  {word:'hat',        cn:'帽子',   emoji:'🎩'},
+  {word:'ice cream',  cn:'冰淇淋', emoji:'🍦'},
+  {word:'juice',      cn:'果汁',   emoji:'🧃'},
+  {word:'kite',       cn:'风筝',   emoji:'🪁'},
+  {word:'lion',       cn:'狮子',   emoji:'🦁'},
+  {word:'moon',       cn:'月亮',   emoji:'🌙'},
+  {word:'nose',       cn:'鼻子',   emoji:'👃'},
+  {word:'orange',     cn:'橙子',   emoji:'🍊'},
+  {word:'pig',        cn:'猪',     emoji:'🐷'},
+  {word:'queen',      cn:'女王',   emoji:'👑'},
+  {word:'rabbit',     cn:'兔子',   emoji:'🐰'},
+  {word:'sun',        cn:'太阳',   emoji:'☀️'},
+  {word:'tiger',      cn:'老虎',   emoji:'🐯'},
+  {word:'umbrella',   cn:'雨伞',   emoji:'☂️'},
+  {word:'violin',     cn:'小提琴', emoji:'🎻'},
+  {word:'watermelon', cn:'西瓜',   emoji:'🍉'},
+  {word:'xylophone',  cn:'木琴',   emoji:'🎵'},
+  {word:'yo-yo',      cn:'悠悠球', emoji:'🪀'},
+  {word:'zebra',      cn:'斑马',   emoji:'🦓'},
+];
+const DEFAULT_PAIRS = DEFAULT_MEM.slice(0, 13).map(w => ({word:w.word, cn:w.cn, emoji:w.emoji}));
+
+/* ================= 页面元素 ================= */
+const $ = id => document.getElementById(id);
+const topEl = $('top'), arenaEl = $('arena'), gamebarEl = $('gamebar');
+const panels = [$('panel0'), $('panel1')];
+const boardEls = [$('board0'), $('board1')];
+const winOverlay = $('winOverlay');
+const TEAM_EMOJI = ['🔴', '🔵'];
+
+/* ================= 状态 ================= */
+const LS_KEY = 'letterFlipGame.v2';
+const LS_KEY_OLD = 'letterFlipGame.v1';
+const IMG_PREFIX = 'letterFlipImg.';
+const TEAMS_KEY = 'letterFlipGame.teams.v1';
+
+let config;                          // {mem:[26], pairs:[13]}
+let game = 'letters';                // 'letters' | 'memory'
+let teamNames = ['红队', '蓝队'];
+let teamScores = [0, 0];             // 累计分（跨游戏，可清零）
+let boards = [null, null];           // 每队卡牌数据
+let winner = -1;                     // 当前游戏获胜队（-1 无）
+
+// 字母翻翻看（配对）
+let decks = [[], []];                // 每队洗好的 26 个词id（13 对）
+let matchedSets = [new Set(), new Set()]; // 已配对的卡位
+let pairsDone = [0, 0];              // 已配对数
+let openIdx = [-1, -1];              // 每队当前保持翻开的卡
+
+// 记忆大挑战
+let mem = null;                      // {phase, mapping, remain, asked, curW, tried, answered}
+let answeredCount = [0, 0];          // 每队答对数
+
+let timers = [], memInts = [];
+let muted = false;
+
+function clearAllTimers(){
+  timers.forEach(clearTimeout); timers = [];
+  memInts.forEach(clearInterval); memInts = [];
+}
+
+/* ================= 存储 ================= */
+function loadConfig(){
+  try{
+    const raw = localStorage.getItem(LS_KEY);
+    if(raw){
+      const d = JSON.parse(raw);
+      if(d && Array.isArray(d.mem) && d.mem.length === 26 && Array.isArray(d.pairs) && d.pairs.length === 13){
+        return {
+          mem: d.mem.map(w => ({word:String(w.word||''), cn:String(w.cn||''), emoji:String(w.emoji||''), img:String(w.img||'')})),
+          pairs: d.pairs.map(w => ({word:String(w.word||''), cn:String(w.cn||''), emoji:String(w.emoji||'')})),
+        };
+      }
+    }
+    // 旧版迁移：26 词 A-Z → 记忆挑战；前 13 个 → 翻翻看
+    const old = JSON.parse(localStorage.getItem(LS_KEY_OLD));
+    if(old && Array.isArray(old.words) && old.words.length === 26){
+      const mem = old.words.map(w => ({word:String(w.word||''), cn:String(w.cn||''), emoji:String(w.emoji||''), img:String(w.img||'')}));
+      return {mem, pairs: mem.slice(0, 13).map(w => ({word:w.word, cn:w.cn, emoji:w.emoji}))};
+    }
+  }catch(e){}
+  return {
+    mem: DEFAULT_MEM.map(w => ({...w, img:''})),
+    pairs: DEFAULT_PAIRS.map(w => ({...w})),
+  };
+}
+function saveConfig(){ try{ localStorage.setItem(LS_KEY, JSON.stringify(config)); }catch(e){} }
+function getImgCache(word){ try{ return localStorage.getItem(IMG_PREFIX + word); }catch(e){ return null; } }
+function setImgCache(word, url){ try{ localStorage.setItem(IMG_PREFIX + word, url); }catch(e){} }
+function loadTeamNames(){
+  try{
+    const t = JSON.parse(localStorage.getItem(TEAMS_KEY));
+    if(Array.isArray(t) && t.length === 2 && t[0] && t[1]) return t;
+  }catch(e){}
+  return ['红队', '蓝队'];
+}
+function saveTeamNames(){ try{ localStorage.setItem(TEAMS_KEY, JSON.stringify(teamNames)); }catch(e){} }
+
+/* ================= 音效 ================= */
+let audioCtx = null;
+function ctx(){
+  if(!audioCtx){
+    try{ audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }catch(e){}
+  }
+  if(audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
+function tone(freq, start, dur, type, vol, slideTo){
+  const c = ctx(); if(!c || muted) return;
+  type = type || 'sine'; vol = vol || 0.18;
+  const t0 = c.currentTime + (start || 0);
+  const o = c.createOscillator(), g = c.createGain();
+  o.type = type; o.frequency.setValueAtTime(freq, t0);
+  if(slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t0 + dur);
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(vol, t0 + 0.015);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  o.connect(g).connect(c.destination);
+  o.start(t0); o.stop(t0 + dur + 0.05);
+}
+function sFlip(){ tone(420, 0, 0.07, 'triangle', 0.15); tone(650, 0.07, 0.1, 'triangle', 0.15); }
+function sDing(){ [523,659,784,1047].forEach((f,i) => tone(f, i*0.09, 0.22, 'triangle', 0.16)); }
+function sWrong(){ tone(220, 0, 0.18, 'sawtooth', 0.07, 160); }
+function sTick(){ tone(880, 0, 0.08, 'square', 0.1); }
+function sFanfare(){ [523,659,784,1047,784,1047,1319].forEach((f,i) => tone(f, i*0.12, 0.25, 'triangle', 0.17)); }
+
+/* ================= 英语发音 ================= */
+let enVoice = null;
+function pickVoice(){
+  try{
+    const vs = speechSynthesis.getVoices();
+    enVoice = vs.find(v => /^en[-_]/i.test(v.lang) && /US/i.test(v.lang))
+           || vs.find(v => /^en/i.test(v.lang)) || null;
+  }catch(e){}
+}
+if('speechSynthesis' in window){
+  speechSynthesis.onvoiceschanged = pickVoice;
+  pickVoice();
+}
+function speak(text){
+  if(muted || !text || !('speechSynthesis' in window)) return;
+  try{
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    if(enVoice) u.voice = enVoice;
+    u.lang = enVoice ? enVoice.lang : 'en-US';
+    u.rate = 0.85; u.pitch = 1.1;
+    speechSynthesis.speak(u);
+  }catch(e){}
+}
+
+/* ================= 提示气泡 ================= */
+let toastTimer;
+function toast(msg, ms){
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), ms || 1600);
+}
+
+/* ================= 彩带 & 星星 ================= */
+const cvs = $('confetti'), cctx = cvs.getContext('2d');
+let parts = [], confettiTimer = null;
+function resizeCanvas(){ cvs.width = innerWidth; cvs.height = innerHeight; }
+function confettiBurst(n){
+  resizeCanvas();
+  const colors = ['#FF6B6B','#FFD93D','#6BCB77','#4D96FF','#FF8FB1','#B983FF','#FF9F45'];
+  for(let i = 0; i < n; i++){
+    parts.push({
+      x: innerWidth/2 + (Math.random()-0.5)*innerWidth*0.5,
+      y: innerHeight*0.4,
+      vx: (Math.random()-0.5)*9, vy: -(Math.random()*9 + 4),
+      g: 0.22, s: Math.random()*7 + 5, r: Math.random()*Math.PI,
+      vr: (Math.random()-0.5)*0.3, c: colors[i % colors.length],
+      shape: Math.random() < 0.3 ? 'circle' : 'rect', life: 120,
+    });
+  }
+  if(!confettiTimer) loopConfetti();
+}
+function loopConfetti(){
+  confettiTimer = requestAnimationFrame(() => {
+    cctx.clearRect(0, 0, cvs.width, cvs.height);
+    parts = parts.filter(p => p.life-- > 0 && p.y < cvs.height + 30);
+    for(const p of parts){
+      p.vy += p.g; p.x += p.vx; p.y += p.vy; p.r += p.vr;
+      cctx.save(); cctx.translate(p.x, p.y); cctx.rotate(p.r); cctx.fillStyle = p.c;
+      if(p.shape === 'rect') cctx.fillRect(-p.s/2, -p.s/2, p.s, p.s*0.6);
+      else { cctx.beginPath(); cctx.arc(0, 0, p.s/2, 0, 7); cctx.fill(); }
+      cctx.restore();
+    }
+    if(parts.length) confettiTimer = requestAnimationFrame(loopConfetti);
+    else { confettiTimer = null; cctx.clearRect(0, 0, cvs.width, cvs.height); }
+  });
+}
+function starBurst(el){
+  const r = el.getBoundingClientRect();
+  for(let i = 0; i < 6; i++){
+    const s = document.createElement('span');
+    s.className = 'starburst';
+    s.textContent = ['⭐','✨','🌟'][i % 3];
+    s.style.left = (r.left + r.width/2) + 'px';
+    s.style.top = (r.top + r.height/2) + 'px';
+    s.style.setProperty('--dx', (Math.random()-0.5)*170 + 'px');
+    s.style.setProperty('--dy', (-Math.random()*130 - 30) + 'px');
+    document.body.appendChild(s);
+    setTimeout(() => s.remove(), 900);
+  }
+}
+function shakeCard(el){
+  el.classList.add('wiggle');
+  el.addEventListener('animationend', () => el.classList.remove('wiggle'), {once:true});
+}
+
+/* ================= 工具 ================= */
+function shuffle(arr){
+  const a = arr.slice();
+  for(let i = a.length - 1; i > 0; i--){
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+function makeCard(innerHTML){
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML = '<div class="card-inner">' + innerHTML + '</div>';
+  return card;
+}
+function letterInnerHTML(i){
+  return '<div class="face front" style="--h:' + (i*13) + '">' +
+    '<span class="letter">' + LETTERS[i] + '</span><span class="corner">✦</span></div>' +
+    '<div class="face back"><div class="pic"></div><div class="word"></div><div class="cn"></div></div>';
+}
+function fillLetterBack(card, w){
+  const pic = card.querySelector('.pic');
+  card.querySelector('.word').textContent = w.word || '?';
+  card.querySelector('.cn').textContent = w.cn || '';
+  if(w.img){
+    const im = document.createElement('img');
+    im.src = w.img; im.alt = ''; im.loading = 'lazy';
+    im.onerror = () => { pic.innerHTML = ''; pic.textContent = w.emoji || '📖'; };
+    pic.appendChild(im);
+  }else{
+    pic.textContent = w.emoji || '📖';
+  }
+}
+function flip(t, i, on){
+  if(boards[t] && boards[t].cards[i]) boards[t].cards[i].classList.toggle('flipped', !!on);
+}
+function teamName(t){ return TEAM_EMOJI[t] + ' ' + teamNames[t]; }
+
+/* ================= 布局自适应 ================= */
+function fitBoards(){
+  boardEls.forEach((b, t) => {
+    if(!boards[t]) return;
+    const n = boards[t].cards.length;
+    const rows = Math.ceil(n / 6);
+    const W = b.clientWidth, H = b.clientHeight;
+    if(!W || !H) return;
+    const gap = 8;
+    let cardW = Math.min((W - 5*gap) / 6, (H - (rows-1)*gap) / rows * 0.75);
+    cardW = Math.max(44, Math.floor(cardW));
+    b.style.setProperty('--card-w', cardW + 'px');
+    b.style.setProperty('--card-gap', gap + 'px');
+  });
+}
+function layout(){
+  if(window.matchMedia('(max-width:880px)').matches){
+    arenaEl.style.height = 'auto';
+  }else{
+    const used = topEl.offsetHeight + (gamebarEl.classList.contains('hidden') ? 0 : gamebarEl.offsetHeight) + 14;
+    arenaEl.style.height = 'calc(100vh - ' + used + 'px)';
+  }
+  fitBoards();
+}
+
+/* ================= 界面刷新 ================= */
+function updateHud(){
+  teamNames.forEach((n, t) => {
+    $('name' + t).textContent = n;
+    $('pname' + t).textContent = TEAM_EMOJI[t] + ' ' + n;
+    $('score' + t).textContent = teamScores[t];
+    $('pscore' + t).textContent = teamScores[t];
+    $('prog' + t).textContent = progressText(t);
+  });
+}
+function progressText(t){
+  if(game === 'letters') return '已配对 ' + pairsDone[t] + '/13';
+  if(game === 'memory' && mem){
+    if(mem.phase === 'idle') return '准备中…';
+    if(mem.phase === 'memorize') return '📖 记单词中…';
+    if(mem.phase === 'peek') return '👀 翻看复习中';
+    if(mem.phase === 'check') return '答对 ' + answeredCount[t] + ' 题';
+  }
+  return '';
+}
+function renderGamebar(){
+  const m = mem;
+  if(!m){
+    $('memBar').classList.add('hidden');
+    $('quizBar').classList.add('hidden');
+    return;
+  }
+  const inCheck = m.phase === 'check';
+  const hasQ = inCheck && m.asked && m.asked.length > 0;
+  $('quizBar').classList.toggle('hidden', !hasQ);
+  $('memBar').classList.toggle('hidden', inCheck);
+  const idle = m.phase === 'idle';
+  $('memTime').classList.toggle('hidden', !idle);
+  $('qTotalSel').classList.toggle('hidden', !idle);
+  $('btnMemorize').classList.toggle('hidden', m.phase === 'memorize' || inCheck);
+  $('btnMemorize').textContent = (m.phase === 'peek') ? '🔁 再看一遍' : '👀 开始记忆';
+  $('btnSkipMem').classList.toggle('hidden', m.phase !== 'memorize');
+  $('btnCheck').classList.toggle('hidden', m.phase !== 'peek');
+  if(inCheck) $('memCount').textContent = '⚡ 抢答开始！';
+  else if(idle) $('memCount').textContent = '准备开始！';
+  else if(m.phase === 'memorize') $('memCount').textContent = '⏳ ' + m.remain + ' 秒';
+  else $('memCount').textContent = '👀 翻看复习中…';
+  updateHud();
+}
+
+/* ================= 开始游戏（按当前 game 重建两面板） ================= */
+function startGame(){
+  clearAllTimers();
+  winner = -1;
+  boardEls.forEach(b => b.innerHTML = '');
+  if(game === 'letters') setupLetters();
+  else setupMemory();
+  updateHud();
+  layout();
+}
+function setGame(g){
+  game = g;
+  $('btnGameLetters').classList.toggle('active', g === 'letters');
+  $('btnGameMemory').classList.toggle('active', g === 'memory');
+  gamebarEl.classList.toggle('hidden', g !== 'memory');
+  startGame();
+}
+
+/* ================= 游戏 1：字母翻翻看（13 对单词） ================= */
+function setupLetters(){
+  decks = [[], []];
+  matchedSets = [new Set(), new Set()];
+  pairsDone = [0, 0];
+  openIdx = [-1, -1];
+  [0, 1].forEach(t => {
+    const ids = [];
+    for(let k = 0; k < 13; k++) ids.push(k, k);
+    decks[t] = shuffle(ids);                     // 两队各自随机，位置不同
+    const b = boardEls[t];
+    for(let i = 0; i < 26; i++){
+      const card = makeCard(letterInnerHTML(i));
+      card.style.animationDelay = (i*0.02) + 's';
+      fillLetterBack(card, config.pairs[decks[t][i]]);   // 背面用表情，不联网找图
+      card.addEventListener('click', () => lettersClick(t, i));
+      b.appendChild(card);
+    }
+    boards[t] = {cards: [...b.children]};
+  });
+}
+function lettersClick(t, i){
+  if(winner >= 0) return;
+  if(matchedSets[t].has(i)) return;
+  const open = openIdx[t];
+  if(open === i) return;
+  if(open === -1){                       // 第一张：翻开，不翻回去
+    openIdx[t] = i;
+    flip(t, i, true);
+    sFlip();
+    speak(config.pairs[decks[t][i]].word);
+    return;
+  }
+  // 第二张
+  flip(t, i, true);
+  sFlip();
+  if(decks[t][open] === decks[t][i]){    // 一样：都留着
+    matchedSets[t].add(open); matchedSets[t].add(i);
+    boards[t].cards[open].classList.add('matched');
+    boards[t].cards[i].classList.add('matched');
+    pairsDone[t]++;
+    teamScores[t] += 10;
+    sDing(); starBurst(boards[t].cards[i]); confettiBurst(40);
+    openIdx[t] = -1;
+    if(pairsDone[t] === 13){
+      winner = t;
+      teamScores[t] += 30;
+      updateHud();
+      sFanfare(); confettiBurst(200);
+      openWin(t, '🔤 字母翻翻看', null);
+      return;
+    }
+    toast(teamName(t) + ' 🎉 配对成功 +10');
+  }else{                                 // 不一样：第二张翻回去，第一张留着
+    const back = i;
+    timers.push(setTimeout(() => { if(!matchedSets[t].has(back)) flip(t, back, false); }, MISMATCH_MS));
+    sWrong();
+    toast(teamName(t) + ' 🤔 不一样哦，再找找～');
+  }
+  updateHud();
+}
+
+/* ================= 游戏 2：记忆大挑战 ================= */
+function setupMemory(){
+  // 26 个不同单词随机放到字母下面（两队各自随机，位置不同）
+  const mapping = [shuffle([...Array(26).keys()]), shuffle([...Array(26).keys()])];
+  mem = {phase: 'idle', mapping, remain: +$('memTime').value, asked: [], curW: -1, tried: [false, false], answered: false};
+  answeredCount = [0, 0];
+  [0, 1].forEach(t => {
+    const b = boardEls[t];
+    for(let i = 0; i < 26; i++){
+      const card = makeCard(letterInnerHTML(i));
+      card.style.animationDelay = (i*0.02) + 's';
+      const w = config.mem[mapping[t][i]];
+      fillLetterBack(card, w);
+      card.addEventListener('click', () => memoryClick(t, i));
+      b.appendChild(card);
+    }
+    boards[t] = {cards: [...b.children]};
+  });
+  renderGamebar();
+}
+function beginMemorize(){
+  if(!mem || mem.phase === 'memorize' || mem.phase === 'check') return;
+  mem.phase = 'memorize';
+  mem.remain = +$('memTime').value;
+  // 记忆阶段：全部翻到背面，只呈现单词（字母藏起来）
+  [0, 1].forEach(t => boards[t].cards.forEach((c, i) => {
+    timers.push(setTimeout(() => {
+      if(mem && mem.phase === 'memorize') c.classList.add('flipped');
+    }, i * 25));
+  }));
+  renderGamebar();
+  memInts.push(setInterval(() => {
+    mem.remain--;
+    if(mem.remain <= 0){
+      mem.remain = 0;
+      endMemorize();
+    }else{
+      renderGamebar();
+      if(mem.remain <= 3) sTick();
+    }
+  }, 1000));
+}
+function endMemorize(){
+  memInts.forEach(clearInterval); memInts = [];
+  if(!mem || mem.phase !== 'memorize') return;
+  mem.phase = 'peek';                    // 进入翻看复习：翻一个看一个、自动翻回
+  [0, 1].forEach(t => boards[t].cards.forEach(c => c.classList.remove('flipped')));
+  renderGamebar();
+  toast('👀 翻看复习中，准备好就点「检查记忆情况」！', 2200);
+}
+function beginCheck(){
+  if(!mem || mem.phase !== 'peek') return;
+  mem.phase = 'check';
+  mem.asked = [];
+  mem.curW = -1;
+  mem.tried = [false, false];
+  mem.answered = false;
+  answeredCount = [0, 0];
+  renderGamebar();
+  count321();
+}
+function count321(){
+  const box = $('countBox');
+  box.classList.remove('hidden');
+  let n = 3;
+  const step = () => {
+    if(n === 0){
+      box.classList.add('hidden');
+      box.innerHTML = '';
+      nextQuestion();
+      return;
+    }
+    box.innerHTML = '<span>' + n + '</span>';
+    sTick();
+    n--;
+    timers.push(setTimeout(step, 750));
+  };
+  step();
+}
+function nextQuestion(){
+  const total = +$('qTotalSel').value;
+  if(mem.asked.length >= total){ endRound(); return; }
+  const pool = [];
+  for(let k = 0; k < 26; k++) if(!mem.asked.includes(k)) pool.push(k);
+  const wid = pool[Math.floor(Math.random() * pool.length)];
+  mem.asked.push(wid);
+  mem.curW = wid;
+  mem.tried = [false, false];
+  mem.answered = false;
+  const w = config.mem[wid];
+  $('qIdx').textContent = mem.asked.length;
+  $('qTotal').textContent = total;
+  $('qbEmoji').textContent = w.emoji || '📖';
+  $('qbWord').textContent = w.word + (w.cn ? ' ' + w.cn : '');
+  renderGamebar();
+  speak(w.word);
+}
+function memoryClick(t, i){
+  if(!mem) return;
+  if(mem.phase === 'peek'){ memoryPeek(t, i); return; }
+  if(mem.phase !== 'check') return;
+  // ---- 抢答检查 ----
+  if(mem.answered) return;
+  if(mem.tried[t]) return;               // 每队每题只点一次
+  if(boards[t].cards[i].classList.contains('matched')) return;
+  const wid = mem.mapping[t][i];
+  if(wid === mem.curW){                  // 回答正确：不翻回去
+    mem.answered = true;
+    answeredCount[t]++;
+    teamScores[t] += 10;
+    flip(t, i, true);
+    boards[t].cards[i].classList.add('matched');
+    sDing(); confettiBurst(60); starBurst(boards[t].cards[i]);
+    toast(teamName(t) + ' 🎉 回答正确 +10');
+    updateHud();
+    timers.push(setTimeout(nextQuestion, 1600));
+  }else{                                 // 回答错误：翻回去
+    mem.tried[t] = true;
+    flip(t, i, true);
+    sWrong(); shakeCard(boards[t].cards[i]);
+    toast(teamName(t) + ' ✋ 不是这个哦，翻回去～');
+    timers.push(setTimeout(() => {
+      if(!boards[t].cards[i].classList.contains('matched')) flip(t, i, false);
+    }, WRONG_SHOW_MS));
+    if(mem.tried[0] && mem.tried[1] && !mem.answered) revealCorrect();
+  }
+}
+function memoryPeek(t, i){
+  const card = boards[t].cards[i];
+  if(card.classList.contains('flipped')){ flip(t, i, false); return; }
+  flip(t, i, true);
+  sFlip();
+  speak(config.mem[mem.mapping[t][i]].word);
+  timers.push(setTimeout(() => {
+    if(!boards[t].cards[i].classList.contains('matched')) flip(t, i, false);
+  }, PEEK_BACK_MS));
+}
+function revealCorrect(){
+  mem.answered = true;
+  [0, 1].forEach(t => {
+    const li = mem.mapping[t].indexOf(mem.curW);
+    if(li >= 0){
+      flip(t, li, true);
+      timers.push(setTimeout(() => flip(t, li, false), REVEAL_MS));
+    }
+  });
+  toast('📖 答案亮出来啦，看清楚哦！', 1800);
+  timers.push(setTimeout(nextQuestion, REVEAL_MS + 400));
+}
+function endRound(){
+  let winT = -1;
+  if(answeredCount[0] > answeredCount[1]){ winT = 0; teamScores[0] += 20; }
+  else if(answeredCount[1] > answeredCount[0]){ winT = 1; teamScores[1] += 20; }
+  const text = '红队答对 ' + answeredCount[0] + ' 题 · 蓝队答对 ' + answeredCount[1] + ' 题\n'
+    + TEAM_EMOJI[0] + ' ' + teamNames[0] + ' ' + teamScores[0] + ' 分 · '
+    + TEAM_EMOJI[1] + ' ' + teamNames[1] + ' ' + teamScores[1] + ' 分';
+  if(winT >= 0) sFanfare();
+  openWin(winT, '🧠 记忆大挑战', text);
+}
+
+/* ================= 胜负弹窗 ================= */
+function openWin(t, gameLabel, customText){
+  if(t >= 0){
+    $('winEmoji').textContent = '🏆';
+    $('winTitle').textContent = teamName(t) + ' 在「' + gameLabel + '」获胜！';
+  }else{
+    $('winEmoji').textContent = '🤝';
+    $('winTitle').textContent = '「' + gameLabel + '」平局！';
+  }
+  $('winText').textContent = customText ||
+    (TEAM_EMOJI[0] + ' ' + teamNames[0] + ' ' + teamScores[0] + ' 分 · '
+    + TEAM_EMOJI[1] + ' ' + teamNames[1] + ' ' + teamScores[1] + ' 分');
+  winOverlay.classList.remove('hidden');
+}
+
+/* ================= 图片自动寻找（记忆挑战单词用） ================= */
+async function wikimediaSearch(word){
+  const url = 'https://commons.wikimedia.org/w/api.php?action=query&format=json&origin=*'
+    + '&generator=search&gsrnamespace=6&gsrlimit=8&gsrsearch='
+    + encodeURIComponent(word + ' filetype:bitmap')
+    + '&prop=imageinfo&iiprop=url&iiurlwidth=480';
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 7000);
+  try{
+    const res = await fetch(url, {signal: ctrl.signal});
+    if(!res.ok) return null;
+    const data = await res.json();
+    const pages = Object.values((data.query && data.query.pages) || {});
+    for(const p of pages){
+      const ii = p.imageinfo && p.imageinfo[0];
+      if(ii && ii.thumburl) return ii.thumburl;
+    }
+    return null;
+  }catch(e){ return null; }
+  finally{ clearTimeout(t); }
+}
+function pollinationsUrl(word, idx){
+  return 'https://image.pollinations.ai/prompt/'
+    + encodeURIComponent('cute cartoon ' + word + ' for children, simple flat illustration, bright colors, white background')
+    + '?width=512&height=512&nologo=true&seed=' + (idx*7 + 3);
+}
+function loremflickrUrl(word){
+  return 'https://loremflickr.com/480/480/' + encodeURIComponent(word) + '?lock=1';
+}
+function tryLoad(src, timeout){
+  return new Promise(res => {
+    const img = new Image();
+    let done = false;
+    const t = setTimeout(() => { if(!done){ done = true; res(false); } }, timeout || 6000);
+    img.onload = () => { if(!done){ done = true; clearTimeout(t); res(true); } };
+    img.onerror = () => { if(!done){ done = true; clearTimeout(t); res(false); } };
+    img.src = src;
+  });
+}
+async function findImage(word, idx){
+  word = (word || '').trim();
+  if(!word) return null;
+  if(!navigator.onLine) return null;
+  const cached = getImgCache(word);
+  if(cached) return cached;
+  const candidates = [];
+  const wiki = await wikimediaSearch(word);
+  if(wiki) candidates.push(wiki);
+  candidates.push(pollinationsUrl(word, idx));
+  candidates.push(loremflickrUrl(word));
+  for(const u of candidates){
+    if(await tryLoad(u)){
+      setImgCache(word, u);
+      return u;
+    }
+  }
+  return null;
+}
+
+/* ================= 设置面板 ================= */
+function buildSettingsRows(){
+  const rows = $('settingsRows');
+  rows.innerHTML = '';
+  const head1 = document.createElement('h3');
+  head1.className = 'sgroup';
+  head1.textContent = '🧠 记忆大挑战单词（26 个都不一样）';
+  rows.appendChild(head1);
+  for(let i = 0; i < 26; i++){
+    const row = document.createElement('div');
+    row.className = 'srow mem';
+    row.dataset.idx = i;
+    row.style.setProperty('--h', i*13);
+    row.innerHTML =
+      '<div class="sletter">' + (i+1) + '</div>' +
+      '<input class="s-word" placeholder="单词(英文)">' +
+      '<input class="s-cn" placeholder="中文意思">' +
+      '<input class="s-emoji" placeholder="😊" title="表情">' +
+      '<input class="s-img" placeholder="图片网址(可选)">' +
+      '<button class="s-fetch" title="自动找图">🖼️</button>';
+    row.querySelector('.s-fetch').addEventListener('click', async e => {
+      const btn = e.target;
+      const w = row.querySelector('.s-word').value.trim();
+      if(!w){ toast('✏️ 先填单词再找图哦'); return; }
+      btn.textContent = '⏳';
+      const url = await findImage(w, i);
+      if(url){
+        row.querySelector('.s-img').value = url;
+        config.mem[i].img = url;
+        toast('✅ 找到图片啦！');
+      }else{
+        toast('😅 没找到，用表情也可以哟');
+      }
+      btn.textContent = '🖼️';
+    });
+    rows.appendChild(row);
+  }
+  const head2 = document.createElement('h3');
+  head2.className = 'sgroup';
+  head2.textContent = '🔤 字母翻翻看单词（13 个，每个出现两次）';
+  rows.appendChild(head2);
+  for(let i = 0; i < 13; i++){
+    const row = document.createElement('div');
+    row.className = 'srow pair';
+    row.dataset.idx = i;
+    row.style.setProperty('--h', i*13);
+    row.innerHTML =
+      '<div class="sletter">' + (i+1) + '</div>' +
+      '<input class="s-word" placeholder="单词(英文)">' +
+      '<input class="s-cn" placeholder="中文意思">' +
+      '<input class="s-emoji" placeholder="😊" title="表情">';
+    rows.appendChild(row);
+  }
+}
+function fillSettingsRows(){
+  $('settingsRows').querySelectorAll('.srow.mem').forEach(row => {
+    const i = +row.dataset.idx, w = config.mem[i];
+    row.querySelector('.s-word').value = w.word || '';
+    row.querySelector('.s-cn').value = w.cn || '';
+    row.querySelector('.s-emoji').value = w.emoji || '';
+    row.querySelector('.s-img').value = w.img || '';
+  });
+  $('settingsRows').querySelectorAll('.srow.pair').forEach(row => {
+    const i = +row.dataset.idx, w = config.pairs[i];
+    row.querySelector('.s-word').value = w.word || '';
+    row.querySelector('.s-cn').value = w.cn || '';
+    row.querySelector('.s-emoji').value = w.emoji || '';
+  });
+}
+function openSettings(firstRun){
+  fillSettingsRows();
+  $('settingsOverlay').classList.remove('hidden');
+  if(firstRun) toast('✏️ 先设置本轮单词，点「保存并开始」就能玩啦！', 2600);
+}
+function closeSettings(){ $('settingsOverlay').classList.add('hidden'); }
+function saveFromRows(){
+  const oldMem = config.mem.map(w => w.word);
+  const mem = [];
+  $('settingsRows').querySelectorAll('.srow.mem').forEach(row => {
+    const i = +row.dataset.idx;
+    const word = row.querySelector('.s-word').value.trim();
+    const cn = row.querySelector('.s-cn').value.trim();
+    const emoji = row.querySelector('.s-emoji').value.trim();
+    const img = row.querySelector('.s-img').value.trim();
+    mem[i] = {word, cn, emoji, img: (word !== oldMem[i]) ? '' : img};
+  });
+  const pairs = [];
+  $('settingsRows').querySelectorAll('.srow.pair').forEach(row => {
+    const i = +row.dataset.idx;
+    pairs[i] = {
+      word: row.querySelector('.s-word').value.trim(),
+      cn: row.querySelector('.s-cn').value.trim(),
+      emoji: row.querySelector('.s-emoji').value.trim(),
+    };
+  });
+  config = {mem, pairs};
+  saveConfig();
+  closeSettings();
+  startGame();
+  sDing();
+  toast('✅ 保存成功！开始游戏吧！');
+}
+async function fetchAllImages(){
+  const btn = $('btnFetchAll');
+  btn.disabled = true;
+  const rows = [...$('settingsRows').querySelectorAll('.srow.mem')];
+  const todo = rows.filter(r => r.querySelector('.s-word').value.trim() && !r.querySelector('.s-img').value.trim());
+  let miss = 0;
+  for(let k = 0; k < todo.length; k++){
+    const r = todo[k];
+    btn.textContent = '🖼️ 找图中 ' + (k+1) + '/' + todo.length;
+    const w = r.querySelector('.s-word').value.trim();
+    const url = await findImage(w, +r.dataset.idx);
+    if(url){
+      r.querySelector('.s-img').value = url;
+      config.mem[+r.dataset.idx].img = url;
+      miss = 0;
+    }else if(++miss >= 3){
+      toast('🌐 网络好像不太通，先用表情图玩吧！', 2400);
+      break;
+    }
+  }
+  btn.textContent = '🖼️ 一键找图';
+  btn.disabled = false;
+  toast(todo.length ? '🖼️ 找图完成！' : '所有单词都已有图片 😊');
+}
+
+/* ================= 事件绑定 ================= */
+$('btnGameLetters').addEventListener('click', () => setGame('letters'));
+$('btnGameMemory').addEventListener('click', () => setGame('memory'));
+$('btnRestart').addEventListener('click', () => { startGame(); toast('🔄 重开本局！'); });
+$('btnClear').addEventListener('click', () => {
+  teamScores = [0, 0];
+  startGame();
+  toast('🧹 比分清零啦！');
+});
+$('btnMute').addEventListener('click', () => {
+  muted = !muted;
+  $('btnMute').textContent = muted ? '🔇' : '🔊';
+  if(!muted) sDing();
+});
+$('btnSettings').addEventListener('click', () => openSettings(false));
+$('btnMemorize').addEventListener('click', beginMemorize);
+$('btnSkipMem').addEventListener('click', endMemorize);
+$('btnCheck').addEventListener('click', beginCheck);
+$('qbSpeak2').addEventListener('click', () => { if(mem && mem.curW >= 0) speak(config.mem[mem.curW].word); });
+$('winAgain').addEventListener('click', () => { winOverlay.classList.add('hidden'); startGame(); });
+$('winClose').addEventListener('click', () => winOverlay.classList.add('hidden'));
+$('btnSave').addEventListener('click', saveFromRows);
+$('btnCloseSettings').addEventListener('click', closeSettings);
+$('btnDefaults').addEventListener('click', () => {
+  config = {
+    mem: DEFAULT_MEM.map(w => ({...w, img:''})),
+    pairs: DEFAULT_PAIRS.map(w => ({...w})),
+  };
+  saveConfig();
+  fillSettingsRows();
+  toast('✨ 已恢复默认词库！');
+});
+$('btnFetchAll').addEventListener('click', fetchAllImages);
+[0, 1].forEach(t => {
+  const nameEl = $('pname' + t);
+  nameEl.addEventListener('click', () => {
+    const n = prompt('给 ' + teamNames[t] + ' 起个新名字：', teamNames[t]);
+    if(n && n.trim()){
+      teamNames[t] = n.trim().slice(0, 6);
+      saveTeamNames();
+      updateHud();
+    }
+  });
+  $('name' + t).addEventListener('click', () => nameEl.click());
+});
+window.addEventListener('resize', layout);
+document.addEventListener('pointerdown', () => ctx());
+
+/* ================= 启动 ================= */
+config = loadConfig();
+teamNames = loadTeamNames();
+buildSettingsRows();
+setGame('letters');
+if(!localStorage.getItem(LS_KEY)){
+  setTimeout(() => openSettings(true), 500);
+}
+</script>
+</body>
+</html>
