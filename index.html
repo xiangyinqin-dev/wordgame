@@ -167,6 +167,7 @@ select{font-family:inherit;font-size:14px;border:2px solid #cfe6ff;border-radius
     <button class="btn small" id="btnRestart">🔄 重开本局</button>
     <button class="btn small" id="btnClear">🧹 清零比分</button>
     <button class="btn small" id="btnSettings">⚙️ 设置单词</button>
+    <button class="btn small" id="btnSaveOffline">💾 离线保存</button>
   </div>
 </header>
 
@@ -901,12 +902,30 @@ function tryLoad(src, timeout){
     img.src = src;
   });
 }
+/* 离线探测：navigator.onLine 不可靠（连着没网的 WiFi 也显示在线），真正试一下才知道 */
+let offlineFlag = false;            // 一旦确认断网，本次会话直接走离线模式
+let probeCache = {t: 0, ok: true};
+async function probeOnline(){
+  const now = Date.now();
+  if(now - probeCache.t < 60000) return probeCache.ok;   // 60 秒内复用结果
+  try{
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 3000);
+    const res = await fetch('https://commons.wikimedia.org/w/api.php?action=query&format=json&origin=*&meta=siteinfo', {signal: ctrl.signal});
+    clearTimeout(timer);
+    probeCache = {t: now, ok: res.ok};
+  }catch(e){
+    probeCache = {t: now, ok: false};
+  }
+  return probeCache.ok;
+}
 async function findImage(word, idx){
   word = (word || '').trim();
   if(!word) return null;
-  if(!navigator.onLine) return null;
+  if(offlineFlag || !navigator.onLine) return null;    // 已确认断网：直接表情兜底
   const cached = getImgCache(word);
   if(cached) return cached;
+  if(!(await probeOnline())){ offlineFlag = true; return null; }  // 网络不通：进入离线模式
   const candidates = [];
   const wiki = await wikimediaSearch(word);
   if(wiki) candidates.push(wiki);
@@ -952,7 +971,7 @@ function buildSettingsRows(){
         config.mem[i].img = url;
         toast('✅ 找到图片啦！');
       }else{
-        toast('😅 没找到，用表情也可以哟');
+        toast(offlineFlag ? '📴 没网啦，用表情图也一样好玩！' : '😅 没找到，用表情也可以哟');
       }
       btn.textContent = '🖼️';
     });
@@ -1048,6 +1067,27 @@ async function fetchAllImages(){
   toast(todo.length ? '🖼️ 找图完成！' : '所有单词都已有图片 😊');
 }
 
+/* ================= 离线保存（把游戏存成文件，断网双击即玩） ================= */
+async function saveOfflineCopy(){
+  if(location.protocol === 'file:'){
+    toast('✅ 你现在用的就是本地文件，断网直接双击打开就能玩！');
+    return;
+  }
+  try{
+    const res = await fetch(location.href, {cache: 'no-store'});
+    const text = await res.text();
+    const blob = new Blob([text], {type: 'text/html;charset=utf-8'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = '字母翻牌小游戏.html';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    toast('💾 保存成功！断网时双击这个文件就能玩');
+  }catch(e){
+    toast('😅 保存失败，试试右键页面选「另存为」');
+  }
+}
+
 /* ================= 事件绑定 ================= */
 $('btnGameLetters').addEventListener('click', () => setGame('letters'));
 $('btnGameMemory').addEventListener('click', () => setGame('memory'));
@@ -1063,6 +1103,7 @@ $('btnMute').addEventListener('click', () => {
   if(!muted) sDing();
 });
 $('btnSettings').addEventListener('click', () => openSettings(false));
+$('btnSaveOffline').addEventListener('click', saveOfflineCopy);
 $('btnMemorize').addEventListener('click', beginMemorize);
 $('btnSkipMem').addEventListener('click', endMemorize);
 $('btnCheck').addEventListener('click', beginCheck);
@@ -1095,6 +1136,13 @@ $('btnFetchAll').addEventListener('click', fetchAllImages);
 });
 window.addEventListener('resize', layout);
 document.addEventListener('pointerdown', () => ctx());
+
+/* ================= 离线支持：Service Worker 缓存页面（访问过一次后断网也能打开） ================= */
+if('serviceWorker' in navigator && /^https?:$/.test(location.protocol)){
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {});  // file:// 或没有 sw.js 时静默跳过
+  });
+}
 
 /* ================= 启动 ================= */
 config = loadConfig();
