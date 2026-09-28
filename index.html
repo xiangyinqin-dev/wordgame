@@ -131,6 +131,10 @@ select{font-family:inherit;font-size:14px;border:2px solid #cfe6ff;border-radius
 .srow input{font-family:inherit;font-size:14px;padding:5px 8px;border:2px solid #cfe6ff;border-radius:8px;min-width:0;width:100%;}
 .srow input:focus{outline:none;border-color:#ff9cc2;}
 .s-fetch{font-size:16px;border:2px solid #cfe6ff;background:#fff;border-radius:8px;cursor:pointer;padding:4px 0;}
+.acc-list{display:flex;flex-direction:column;gap:8px;margin:10px 0;text-align:left;}
+.acc-row{display:flex;align-items:center;gap:10px;background:#f6fbff;border:2px solid #d9ecff;border-radius:12px;padding:8px 12px;justify-content:space-between;flex-wrap:wrap;}
+.acc-name{font-size:17px;font-weight:bold;color:#4d7cbd;}
+.acc-row .btns{display:flex;gap:6px;}
 @media (max-width:520px){
   .rows{grid-template-columns:1fr;}
   .srow{grid-template-columns:30px 1fr 1fr 40px 44px;}
@@ -168,6 +172,7 @@ select{font-family:inherit;font-size:14px;border:2px solid #cfe6ff;border-radius
     <button class="btn small" id="btnClear">🧹 清零比分</button>
     <button class="btn small" id="btnSettings">⚙️ 设置单词</button>
     <button class="btn small" id="btnSaveOffline">💾 离线保存</button>
+    <button class="btn small" id="btnAccount">👤 默认账号</button>
   </div>
 </header>
 
@@ -240,6 +245,21 @@ select{font-family:inherit;font-size:14px;border:2px solid #cfe6ff;border-radius
   </div>
 </div>
 
+<!-- 账号弹窗 -->
+<div id="accountOverlay" class="overlay hidden">
+  <div class="panel">
+    <h2>👤 我的账号</h2>
+    <p class="panel-text">当前账号：<b id="accCurrent">默认账号</b></p>
+    <p class="tip">每个账号有自己的一套单词和图片，登录后互不影响～<br>💡 换电脑时用设置里的「📤 导出词库 / 📥 导入词库」把词库搬过去。</p>
+    <div class="acc-list" id="accList"></div>
+    <div class="panel-btns">
+      <button class="btn" id="btnNewAccount">➕ 新建账号</button>
+      <button class="btn" id="btnGuest">👋 用默认账号</button>
+      <button class="btn" id="btnCloseAccount">✖️ 关闭</button>
+    </div>
+  </div>
+</div>
+
 <!-- 设置弹窗 -->
 <div id="settingsOverlay" class="overlay hidden">
   <div class="panel">
@@ -247,6 +267,8 @@ select{font-family:inherit;font-size:14px;border:2px solid #cfe6ff;border-radius
     <div class="panel-btns">
       <button class="btn" id="btnDefaults">✨ 恢复默认词库</button>
       <button class="btn" id="btnFetchAll">🖼️ 一键找图</button>
+      <button class="btn" id="btnExport">📤 导出词库</button>
+      <button class="btn" id="btnImport">📥 导入词库</button>
       <button class="btn" id="btnSave">✅ 保存并开始</button>
       <button class="btn" id="btnCloseSettings">✖️ 关闭</button>
     </div>
@@ -319,10 +341,13 @@ const TEAM_EMOJI = ['🔴', '🔵'];
 /* ================= 状态 ================= */
 const LS_KEY = 'letterFlipGame.v2';
 const LS_KEY_OLD = 'letterFlipGame.v1';
+const PROFILE_KEY = 'letterFlipGame.profiles.v1';
+const ACCT_CONFIG_PREFIX = 'letterFlipGame.acct.';
 const IMG_PREFIX = 'letterFlipImg.';
 const TEAMS_KEY = 'letterFlipGame.teams.v1';
 
 let config;                          // {mem:[26], pairs:[13]}
+let profiles = {accounts: [], activeId: 'guest'};   // 本机账号列表 + 当前账号（guest=默认账号）
 let game = 'letters';                // 'letters' | 'memory'
 let teamNames = ['红队', '蓝队'];
 let teamScores = [0, 0];             // 累计分（跨游戏，可清零）
@@ -348,9 +373,23 @@ function clearAllTimers(){
 }
 
 /* ================= 存储 ================= */
-function loadConfig(){
+function loadProfiles(){
   try{
-    const raw = localStorage.getItem(LS_KEY);
+    const p = JSON.parse(localStorage.getItem(PROFILE_KEY));
+    if(p && Array.isArray(p.accounts) && typeof p.activeId === 'string'){
+      return {accounts: p.accounts, activeId: p.activeId};
+    }
+  }catch(e){}
+  return {accounts: [], activeId: 'guest'};
+}
+function saveProfiles(){ try{ localStorage.setItem(PROFILE_KEY, JSON.stringify(profiles)); }catch(e){} }
+function configKey(id){ return id === 'guest' ? LS_KEY : ACCT_CONFIG_PREFIX + id; }
+function hasConfig(id){ try{ return !!localStorage.getItem(configKey(id)); }catch(e){ return false; } }
+
+function loadConfig(){       // 按当前账号读取词库
+  const key = configKey(profiles.activeId);
+  try{
+    const raw = localStorage.getItem(key);
     if(raw){
       const d = JSON.parse(raw);
       if(d && Array.isArray(d.mem) && d.mem.length === 26 && Array.isArray(d.pairs) && d.pairs.length === 13){
@@ -360,11 +399,13 @@ function loadConfig(){
         };
       }
     }
-    // 旧版迁移：26 词 A-Z → 记忆挑战；前 13 个 → 翻翻看
-    const old = JSON.parse(localStorage.getItem(LS_KEY_OLD));
-    if(old && Array.isArray(old.words) && old.words.length === 26){
-      const mem = old.words.map(w => ({word:String(w.word||''), cn:String(w.cn||''), emoji:String(w.emoji||''), img:String(w.img||'')}));
-      return {mem, pairs: mem.slice(0, 13).map(w => ({word:w.word, cn:w.cn, emoji:w.emoji}))};
+    // 旧版迁移（仅默认账号）：26 词 A-Z → 记忆挑战；前 13 个 → 翻翻看
+    if(profiles.activeId === 'guest'){
+      const old = JSON.parse(localStorage.getItem(LS_KEY_OLD));
+      if(old && Array.isArray(old.words) && old.words.length === 26){
+        const mem = old.words.map(w => ({word:String(w.word||''), cn:String(w.cn||''), emoji:String(w.emoji||''), img:String(w.img||'')}));
+        return {mem, pairs: mem.slice(0, 13).map(w => ({word:w.word, cn:w.cn, emoji:w.emoji}))};
+      }
     }
   }catch(e){}
   return {
@@ -372,7 +413,7 @@ function loadConfig(){
     pairs: DEFAULT_PAIRS.map(w => ({...w})),
   };
 }
-function saveConfig(){ try{ localStorage.setItem(LS_KEY, JSON.stringify(config)); }catch(e){} }
+function saveConfig(){ try{ localStorage.setItem(configKey(profiles.activeId), JSON.stringify(config)); }catch(e){} }
 function getImgCache(word){ try{ return localStorage.getItem(IMG_PREFIX + word); }catch(e){ return null; } }
 function setImgCache(word, url){ try{ localStorage.setItem(IMG_PREFIX + word, url); }catch(e){} }
 function loadTeamNames(){
@@ -1088,6 +1129,149 @@ async function saveOfflineCopy(){
   }
 }
 
+/* ================= 账号系统（本机多账号，各账号词库互不影响） ================= */
+function currentName(){
+  const a = profiles.accounts.find(x => x.id === profiles.activeId);
+  return a ? a.name : '默认账号';
+}
+function updateAccountUI(){
+  $('btnAccount').textContent = '👤 ' + currentName();
+  $('accCurrent').textContent = currentName();
+}
+function openAccounts(){
+  renderAccList();
+  updateAccountUI();
+  $('accountOverlay').classList.remove('hidden');
+}
+function closeAccounts(){ $('accountOverlay').classList.add('hidden'); }
+function renderAccList(){
+  const el = $('accList');
+  el.innerHTML = '';
+  if(!profiles.accounts.length){
+    const p = document.createElement('p');
+    p.className = 'panel-text';
+    p.textContent = '还没有账号，点「➕ 新建账号」创建一个吧！';
+    el.appendChild(p);
+    return;
+  }
+  profiles.accounts.forEach(a => {
+    const row = document.createElement('div');
+    row.className = 'acc-row';
+    const active = profiles.activeId === a.id;
+    const name = document.createElement('span');
+    name.className = 'acc-name';
+    name.textContent = (active ? '✅ ' : '') + '👤 ' + a.name;
+    const btns = document.createElement('span');
+    btns.className = 'btns';
+    const bLogin = document.createElement('button');
+    bLogin.className = 'btn small';
+    bLogin.textContent = active ? '当前' : '登录';
+    bLogin.disabled = active;
+    bLogin.addEventListener('click', () => loginAccount(a.id));
+    const bDel = document.createElement('button');
+    bDel.className = 'btn small';
+    bDel.textContent = '🗑';
+    bDel.title = '删除账号';
+    bDel.addEventListener('click', () => deleteAccount(a.id));
+    btns.appendChild(bLogin); btns.appendChild(bDel);
+    row.appendChild(name); row.appendChild(btns);
+    el.appendChild(row);
+  });
+}
+function switchAccount(id, popSettings){
+  profiles.activeId = id;
+  saveProfiles();
+  config = loadConfig();
+  if(!$('settingsOverlay').classList.contains('hidden')) fillSettingsRows();
+  startGame();
+  updateAccountUI();
+  toast('👤 当前账号：' + currentName());
+  if(popSettings !== false && !hasConfig(id)){
+    setTimeout(() => openSettings(true), 500);   // 新账号：引导设置自己的单词
+  }
+}
+function createAccount(){
+  const name = prompt('给新账号起个名字（比如老师的名字）：');
+  if(!name || !name.trim()) return;
+  const n = name.trim().slice(0, 10);
+  if(profiles.accounts.some(a => a.name === n)){ toast('⚠️ 这个名字已经有啦，换一个吧'); return; }
+  const pin = prompt('设置密码（4 位以上数字或字母，登录时用）：');
+  if(!pin || pin.trim().length < 4){ toast('⚠️ 密码太短啦，至少 4 位'); return; }
+  const id = 'a' + Date.now().toString(36);
+  profiles.accounts.push({id, name: n, pin: pin.trim()});
+  profiles.activeId = id;
+  saveProfiles();
+  config = loadConfig();          // 新账号从默认词库开始
+  closeAccounts();
+  startGame();
+  updateAccountUI();
+  toast('🎉 账号「' + n + '」创建成功！先设置你的单词吧～');
+  setTimeout(() => openSettings(true), 600);
+}
+function loginAccount(id){
+  const a = profiles.accounts.find(x => x.id === id);
+  if(!a) return;
+  const pin = prompt('请输入「' + a.name + '」的密码：');
+  if(pin !== a.pin){ toast('❌ 密码不对哦'); return; }
+  switchAccount(id);
+  closeAccounts();
+}
+function deleteAccount(id){
+  const a = profiles.accounts.find(x => x.id === id);
+  if(!a) return;
+  const pin = prompt('要删除「' + a.name + '」的账号，请输入密码确认：');
+  if(pin !== a.pin){ toast('❌ 密码不对，没有删除'); return; }
+  profiles.accounts = profiles.accounts.filter(x => x.id !== id);
+  if(profiles.activeId === id) profiles.activeId = 'guest';
+  try{ localStorage.removeItem(ACCT_CONFIG_PREFIX + id); }catch(e){}
+  saveProfiles();
+  config = loadConfig();
+  startGame();
+  renderAccList();
+  updateAccountUI();
+  toast('🗑 账号「' + a.name + '」已删除');
+}
+
+/* ================= 词库导出 / 导入（换电脑搬词库） ================= */
+function exportConfig(){
+  const data = JSON.stringify({type: 'wordgame-config', version: 2, config});
+  const blob = new Blob([data], {type: 'application/json;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = '单词游戏词库-' + currentName() + '.json';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  toast('📤 词库已导出！');
+}
+function importConfig(){
+  const inp = document.createElement('input');
+  inp.type = 'file';
+  inp.accept = '.json,application/json';
+  inp.onchange = () => {
+    const f = inp.files && inp.files[0];
+    if(!f) return;
+    const r = new FileReader();
+    r.onload = () => {
+      try{
+        const d = JSON.parse(r.result);
+        if(d && d.type === 'wordgame-config' && d.config
+          && Array.isArray(d.config.mem) && d.config.mem.length === 26
+          && Array.isArray(d.config.pairs) && d.config.pairs.length === 13){
+          config = d.config;
+          saveConfig();
+          fillSettingsRows();
+          startGame();
+          toast('📥 词库导入成功！已存到账号「' + currentName() + '」');
+        }else{
+          toast('❌ 文件格式不对哦');
+        }
+      }catch(e){ toast('❌ 读取失败，请确认文件正确'); }
+    };
+    r.readAsText(f);
+  };
+  inp.click();
+}
+
 /* ================= 事件绑定 ================= */
 $('btnGameLetters').addEventListener('click', () => setGame('letters'));
 $('btnGameMemory').addEventListener('click', () => setGame('memory'));
@@ -1104,6 +1288,12 @@ $('btnMute').addEventListener('click', () => {
 });
 $('btnSettings').addEventListener('click', () => openSettings(false));
 $('btnSaveOffline').addEventListener('click', saveOfflineCopy);
+$('btnAccount').addEventListener('click', openAccounts);
+$('btnNewAccount').addEventListener('click', createAccount);
+$('btnGuest').addEventListener('click', () => { switchAccount('guest'); closeAccounts(); });
+$('btnCloseAccount').addEventListener('click', closeAccounts);
+$('btnExport').addEventListener('click', exportConfig);
+$('btnImport').addEventListener('click', importConfig);
 $('btnMemorize').addEventListener('click', beginMemorize);
 $('btnSkipMem').addEventListener('click', endMemorize);
 $('btnCheck').addEventListener('click', beginCheck);
@@ -1145,12 +1335,15 @@ if('serviceWorker' in navigator && /^https?:$/.test(location.protocol)){
 }
 
 /* ================= 启动 ================= */
+profiles = loadProfiles();
 config = loadConfig();
 teamNames = loadTeamNames();
 buildSettingsRows();
 setGame('letters');
-if(!localStorage.getItem(LS_KEY)){
-  setTimeout(() => openSettings(true), 500);
+updateAccountUI();
+if(!localStorage.getItem(PROFILE_KEY)){
+  // 第一次使用：先认识账号功能，让老师们创建自己的账号
+  setTimeout(() => openAccounts(), 500);
 }
 </script>
 </body>

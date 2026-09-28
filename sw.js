@@ -1,6 +1,6 @@
 /* 单词大对决 - 离线缓存 Service Worker
    访问过一次后，断网也能打开游戏（图片找图功能在离线时自动用表情图代替） */
-const CACHE = 'wordgame-v1';
+const CACHE = 'wordgame-v2';
 const ASSETS = ['./', './index.html'];
 
 self.addEventListener('install', e => {
